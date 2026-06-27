@@ -3,6 +3,7 @@ import { connectToDatabase } from '@/lib/mongodb'
 import Photo from '@/models/Photo'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,10 +17,24 @@ export async function GET(request: NextRequest) {
     if (tag) filter.tags = tag
 
     const photos = await Photo.find(filter)
-      .sort({ contestWeek: -1, weekRank: 1 })
+      .sort({ contestWeek: -1, weekRank: 1, uploadedAt: -1 })
       .lean()
 
-    return NextResponse.json({ photos: JSON.parse(JSON.stringify(photos)) })
+    // Group photos by contestWeek
+    const groupedPhotos: Record<string, any[]> = {}
+    photos.forEach((photo) => {
+      const week = photo.contestWeek || 'Uncategorized'
+      if (!groupedPhotos[week]) {
+        groupedPhotos[week] = []
+      }
+      groupedPhotos[week].push(photo)
+    })
+
+    return NextResponse.json({ 
+      photos: JSON.parse(JSON.stringify(photos)),
+      grouped: JSON.parse(JSON.stringify(groupedPhotos)),
+      timestamp: new Date().toISOString()
+    })
   } catch (error) {
     console.error('[API /gallery]', error)
     return NextResponse.json({ error: 'Failed to fetch gallery' }, { status: 500 })
