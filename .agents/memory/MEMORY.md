@@ -1,0 +1,3 @@
+- [api-server path conflict](api-server-path-conflict.md) — the scaffold api-server claims /api, blocking Next.js API routes; change its path to /api-server.
+- [lucide-react version split](lucide-react-version.md) — workspace catalog pins 0.545.0; any Next.js artifact must match or get SSR/client icon path mismatches.
+- [WebGL in Replit preview](webgl-replit.md) — Three.js Canvas fails silently in headless iframe; check WebGL availability before mounting Canvas.

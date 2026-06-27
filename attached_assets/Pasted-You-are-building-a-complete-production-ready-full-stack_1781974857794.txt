@@ -1,0 +1,1385 @@
+You are building a complete, production-ready full-stack web application for
+"Monipur Uccha Biddayala Photography Club" (MUPC). This is a real deployed
+product. Every single feature must work perfectly end-to-end. Make absolutely
+zero mistakes — especially in database operations, Cloudinary file handling,
+and authentication. If you are not 100% sure how something works, use the
+safest and simplest implementation. Never guess.
+
+This app will be converted to an Android APK in the future using Capacitor,
+so build it as a PWA from day one with full mobile-first responsive design.
+
+Design with maximum visual impact using your absolute best creative judgment.
+3D effects, particle systems, advanced animations, glassmorphism, cinematic
+depth — whatever you believe makes the most stunning photography club website
+ever built. Full creative freedom. Dark cinematic theme.
+
+════════════════════════════════════════════════════════════
+TECH STACK — USE EXACTLY THESE, NO SUBSTITUTIONS
+════════════════════════════════════════════════════════════
+
+Next.js 14.2.x — App Router
+React 18 — TypeScript 5
+Tailwind CSS v3 — tailwind.config.ts
+Framer Motion v11
+React Three Fiber v8 + @react-three/drei v9 + Three.js v0.167
+MongoDB Atlas via Mongoose v8
+Cloudinary v2 Node.js SDK (server-side only — npm package: cloudinary)
+NextAuth.js v4 — CredentialsProvider only
+bcryptjs v2
+next-pwa v5
+date-fns v3
+axios v1
+lucide-react
+sonner v1 (toasts)
+pnpm
+
+════════════════════════════════════════════════════════════
+ENVIRONMENT VARIABLES
+════════════════════════════════════════════════════════════
+
+These are the ONLY environment variables. The app must work with exactly
+these and nothing else. Do not require any extra Cloudinary dashboard
+configuration, upload presets, webhooks, or any other external setup.
+
+MONGODB_URI=<mongodb atlas connection string>
+CLOUDINARY_CLOUD_NAME=<cloud name>
+CLOUDINARY_API_KEY=<api key>
+CLOUDINARY_API_SECRET=<api secret>
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=<same cloud name, for client>
+NEXTAUTH_SECRET=<random 32+ char string>
+NEXTAUTH_URL=<full app url e.g. https://myapp.replit.app>
+
+════════════════════════════════════════════════════════════
+CLOUDINARY — CRITICAL RULES
+════════════════════════════════════════════════════════════
+
+RULE 1: ALL image uploads go through your own Next.js API route.
+No direct browser-to-Cloudinary uploads. No CldUploadWidget. No upload
+presets. No Cloudinary dashboard configuration needed whatsoever.
+
+RULE 2: The upload flow is:
+  User selects file with <input type="file" accept="image/*">
+  → Client POSTs multipart FormData to /api/upload (your API route)
+  → API route reads the file buffer, converts to base64
+  → API route calls cloudinary.uploader.upload() using the SDK
+  → Cloudinary SDK authenticates using CLOUDINARY_API_KEY +
+    CLOUDINARY_API_SECRET from process.env (server-side, never exposed)
+  → API returns { cloudinaryUrl, cloudinaryPublicId } to client
+  → Client stores these and proceeds
+
+RULE 3: Configure Cloudinary SDK in src/lib/cloudinary.ts:
+
+  import { v2 as cloudinary } from 'cloudinary'
+
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
+    api_key: process.env.CLOUDINARY_API_KEY!,
+    api_secret: process.env.CLOUDINARY_API_SECRET!,
+    secure: true,
+  })
+
+  export default cloudinary
+
+Import this ONLY in server-side files (API routes, server actions).
+NEVER import cloudinary in any file that has "use client".
+
+RULE 4: Upload API route — /api/upload/route.ts:
+
+  import { NextRequest, NextResponse } from 'next/server'
+  import { getServerSession } from 'next-auth/next'
+  import { authOptions } from '@/lib/auth'
+  import cloudinary from '@/lib/cloudinary'
+
+  export async function POST(request: NextRequest) {
+    try {
+      const session = await getServerSession(authOptions)
+      if (!session?.user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      const formData = await request.formData()
+      const file = formData.get('file') as File | null
+      const folder = (formData.get('folder') as string) || 'mupc/uploads'
+
+      if (!file) {
+        return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+      }
+
+      if (!file.type.startsWith('image/')) {
+        return NextResponse.json({ error: 'File must be an image' }, { status: 400 })
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        return NextResponse.json({ error: 'File too large. Max 10MB.' }, { status: 400 })
+      }
+
+      const bytes = await file.arrayBuffer()
+      const buffer = Buffer.from(bytes)
+      const base64 = buffer.toString('base64')
+      const dataUri = `data:${file.type};base64,${base64}`
+
+      const result = await cloudinary.uploader.upload(dataUri, {
+        folder: folder,
+        resource_type: 'image',
+        transformation: [
+          { quality: 'auto', fetch_format: 'auto' },
+          { width: 2000, height: 2000, crop: 'limit' },
+        ],
+      })
+
+      return NextResponse.json({
+        cloudinaryUrl: result.secure_url,
+        cloudinaryPublicId: result.public_id,
+      })
+    } catch (error) {
+      console.error('[API /upload]', error)
+      return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+    }
+  }
+
+RULE 5: When deleting images from Cloudinary (user deletion, photo removal):
+
+  await cloudinary.uploader.destroy(cloudinaryPublicId)
+
+  Always wrap in try/catch. If Cloudinary delete fails, log the error but
+  still continue with the MongoDB deletion. Never let a Cloudinary error
+  block a database cleanup.
+
+RULE 6: Profile photo uploads go to folder 'mupc/profiles'
+Contest photo uploads go to folder 'mupc/contest'
+Photographer best photo uploads go to folder 'mupc/photographers'
+
+RULE 7: When updating a profile photo or photographer photo, ALWAYS delete
+the old Cloudinary image first if a previous publicId exists:
+
+  if (oldPublicId) {
+    try {
+      await cloudinary.uploader.destroy(oldPublicId)
+    } catch (err) {
+      console.error('Failed to delete old Cloudinary image:', err)
+      // continue anyway
+    }
+  }
+
+════════════════════════════════════════════════════════════
+AUTHENTICATION — TWO COMPLETELY SEPARATE LOGIN PAGES
+════════════════════════════════════════════════════════════
+
+There are TWO login pages. They look different and serve different roles.
+Admin accounts CANNOT log in from the public sign-in page.
+Non-admin accounts CANNOT log in from the admin login page.
+
+━━━ PUBLIC SIGN-IN PAGE: /signin ━━━
+
+For members and viewers ONLY.
+After signIn() succeeds, check the returned session role.
+If role === 'admin': immediately call signOut() and show error:
+"Admin accounts must use the Admin Portal to sign in."
+If role === 'member' or 'viewer': redirect to callbackUrl or /contest.
+Style this page to match the public dark cinematic theme of the website.
+Show club name/logo at top. No mention of admin anywhere on this page.
+No link to admin login anywhere on the public site.
+
+━━━ ADMIN LOGIN PAGE: /bash-mubc-bash/login ━━━
+
+For admins ONLY. This is the only way admins can log in.
+After signIn() succeeds, check the returned session role.
+If role !== 'admin': immediately call signOut() and show error:
+"This portal is for administrators only."
+If role === 'admin': redirect to /bash-mubc-bash.
+Style this page completely differently from the public site.
+Clean, minimal, professional. Dark but functional.
+Show only: "MUPC Admin Portal" heading, email field, password field,
+Sign In button, and the error message area.
+No decorations, no 3D, no animations beyond a simple fade in.
+This page must NOT be linked from anywhere on the public website.
+
+━━━ HOW THE AUTH FLOW WORKS ━━━
+
+Both pages use the same NextAuth CredentialsProvider and the same
+signIn('credentials', { email, password, redirect: false }) call.
+The role check after signIn() is what separates them.
+
+In src/lib/auth.ts, the authorize() function:
+1. Trims and lowercases the email
+2. Finds the user in MongoDB by email
+3. If user not found: return null
+4. If user.isActive === false: throw new Error('ACCOUNT_DISABLED')
+5. bcrypt.compare(password, user.password)
+6. If wrong password: return null
+7. Return { id: user._id.toString(), email, name, role, profilePhotoUrl }
+
+In the callbacks:
+jwt: add token.id, token.role, token.profilePhotoUrl from user object
+session: add session.user.id, session.user.role, session.user.profilePhotoUrl
+
+━━━ MIDDLEWARE: middleware.ts ━━━
+
+import { getToken } from 'next-auth/jwt'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+export async function middleware(request: NextRequest) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+  const { pathname } = request.nextUrl
+
+  // Admin routes — require admin role
+  if (pathname.startsWith('/bash-mubc-bash')) {
+    // Allow the login page itself
+    if (pathname === '/bash-mubc-bash/login') {
+      // If already logged in as admin, redirect to dashboard
+      if (token?.role === 'admin') {
+        return NextResponse.redirect(new URL('/bash-mubc-bash', request.url))
+      }
+      return NextResponse.next()
+    }
+    // All other admin routes require admin role
+    if (!token || token.role !== 'admin') {
+      return NextResponse.redirect(new URL('/bash-mubc-bash/login', request.url))
+    }
+    return NextResponse.next()
+  }
+
+  // Member dashboard — require any session
+  if (pathname.startsWith('/dashboard')) {
+    if (!token) {
+      return NextResponse.redirect(
+        new URL(`/signin?callbackUrl=${encodeURIComponent(pathname)}`, request.url)
+      )
+    }
+    return NextResponse.next()
+  }
+
+  // Admin API routes — require admin role
+  if (pathname.startsWith('/api/admin')) {
+    if (!token || token.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    return NextResponse.next()
+  }
+
+  // Dashboard API routes — require any session
+  if (pathname.startsWith('/api/dashboard')) {
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    return NextResponse.next()
+  }
+
+  return NextResponse.next()
+}
+
+export const config = {
+  matcher: [
+    '/bash-mubc-bash/:path*',
+    '/dashboard/:path*',
+    '/api/admin/:path*',
+    '/api/dashboard/:path*',
+  ],
+}
+
+════════════════════════════════════════════════════════════
+MONGODB — CRITICAL RULES
+════════════════════════════════════════════════════════════
+
+RULE 1: MongoDB connection — src/lib/mongodb.ts:
+Use a global cache to prevent creating multiple connections in
+Next.js hot-reload environment.
+
+  import mongoose from 'mongoose'
+
+  const MONGODB_URI = process.env.MONGODB_URI!
+
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI environment variable is not defined')
+  }
+
+  interface GlobalMongoose {
+    conn: typeof mongoose | null
+    promise: Promise<typeof mongoose> | null
+  }
+
+  declare global {
+    var _mongoose: GlobalMongoose | undefined
+  }
+
+  const cached: GlobalMongoose = global._mongoose ?? { conn: null, promise: null }
+  global._mongoose = cached
+
+  export async function connectToDatabase() {
+    if (cached.conn) return cached.conn
+
+    if (!cached.promise) {
+      cached.promise = mongoose.connect(MONGODB_URI, {
+        bufferCommands: false,
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+      })
+    }
+
+    try {
+      cached.conn = await cached.promise
+    } catch (e) {
+      cached.promise = null
+      throw e
+    }
+
+    return cached.conn
+  }
+
+RULE 2: Every Mongoose model file MUST use this exact pattern:
+
+  const ModelName = mongoose.models.ModelName ||
+    mongoose.model<IModelDocument>('ModelName', ModelNameSchema)
+  export default ModelName
+
+  Never use just: mongoose.model('ModelName', schema)
+  This causes "Cannot overwrite model once compiled" errors in Next.js.
+
+RULE 3: Every API route that touches MongoDB must:
+  - Call await connectToDatabase() at the start
+  - Wrap the entire operation in try/catch
+  - Return proper HTTP status codes
+
+RULE 4: Never pass raw Mongoose documents from Server Components to
+Client Components. Always serialize first:
+  const data = await Model.find({}).lean()
+  return JSON.parse(JSON.stringify(data))
+  The .lean() method returns plain JS objects. JSON stringify/parse
+  removes any remaining Mongoose-specific properties.
+
+RULE 5: When creating documents, always use try/catch and check for
+MongoDB error code 11000 (duplicate key) separately:
+
+  try {
+    await Model.create(data)
+  } catch (err: unknown) {
+    const mongoError = err as { code?: number; message?: string }
+    if (mongoError.code === 11000) {
+      return NextResponse.json({ error: 'Duplicate entry' }, { status: 409 })
+    }
+    throw err
+  }
+
+════════════════════════════════════════════════════════════
+MONGODB SCHEMAS — COMPLETE AND EXACT
+════════════════════════════════════════════════════════════
+
+━━━ src/models/User.ts ━━━
+
+  const UserSchema = new Schema({
+    email: {
+      type: String, required: true, unique: true,
+      lowercase: true, trim: true
+    },
+    password: { type: String, required: true },
+    name: { type: String, required: true, trim: true },
+    role: {
+      type: String,
+      enum: ['admin', 'member', 'viewer'],
+      default: 'viewer'
+    },
+    profilePhotoUrl: { type: String, default: null },
+    profilePhotoPublicId: { type: String, default: null },
+    bio: { type: String, default: '', maxlength: 300 },
+    badges: { type: [String], default: [] },
+    savedPhotos: [{ type: Schema.Types.ObjectId, ref: 'Photo' }],
+    isActive: { type: Boolean, default: true },
+    createdAt: { type: Date, default: () => new Date() },
+  })
+  UserSchema.index({ email: 1 })
+  UserSchema.index({ role: 1 })
+
+━━━ src/models/Photo.ts ━━━
+
+  const PhotoSchema = new Schema({
+    cloudinaryPublicId: { type: String, required: true },
+    cloudinaryUrl: { type: String, required: true },
+    title: { type: String, required: true, trim: true },
+    photographerName: { type: String, required: true },
+    uploadedBy: {
+      type: Schema.Types.ObjectId, ref: 'User', required: true
+    },
+    type: {
+      type: String, enum: ['contest', 'gallery'], required: true
+    },
+    contestWeek: { type: String, default: null },
+    votes: { type: Number, default: 0 },
+    views: { type: Number, default: 0 },
+    weekRank: { type: Number, default: null },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending'
+    },
+    tags: {
+      type: [String],
+      enum: ['Street','Portrait','Landscape','Architecture',
+             'Wildlife','Abstract','Documentary','Night'],
+      default: []
+    },
+    uploadedAt: { type: Date, default: () => new Date() },
+  })
+  PhotoSchema.index({ type: 1, contestWeek: 1, status: 1 })
+  PhotoSchema.index({ uploadedBy: 1, contestWeek: 1 })
+  PhotoSchema.index({ photographerName: 1, type: 1 })
+  PhotoSchema.index({ status: 1 })
+
+  NOTE: The one-photo-per-week limit is enforced at the API level
+  with an explicit query check, NOT with a unique index (because
+  partial unique indexes can cause issues). The API check is enough.
+
+━━━ src/models/Photographer.ts ━━━
+
+  const PhotographerSchema = new Schema({
+    name: { type: String, required: true, unique: true, trim: true },
+    userId: {
+      type: Schema.Types.ObjectId, ref: 'User', default: null
+    },
+    wins: { type: Number, default: 0 },
+    bestPhotoUrl: { type: String, default: null },
+    bestPhotoPublicId: { type: String, default: null },
+    bio: { type: String, default: '' },
+    addedAt: { type: Date, default: () => new Date() },
+  })
+  PhotographerSchema.index({ wins: -1 })
+
+━━━ src/models/ContestWeek.ts ━━━
+
+  const ContestWeekSchema = new Schema({
+    weekId: { type: String, required: true, unique: true },
+    endDate: { type: Date, required: true },
+    isActive: { type: Boolean, default: true },
+    winnersSelected: { type: Boolean, default: false },
+    totalPhotos: { type: Number, default: 0 },
+    totalVotes: { type: Number, default: 0 },
+    createdAt: { type: Date, default: () => new Date() },
+  })
+  ContestWeekSchema.index({ isActive: 1 })
+  ContestWeekSchema.index({ weekId: 1 })
+
+━━━ src/models/Vote.ts ━━━
+
+  const VoteSchema = new Schema({
+    photoId: {
+      type: Schema.Types.ObjectId, ref: 'Photo', required: true
+    },
+    voterId: {
+      type: Schema.Types.ObjectId, ref: 'User', required: true
+    },
+    contestWeek: { type: String, required: true },
+    votedAt: { type: Date, default: () => new Date() },
+  })
+  VoteSchema.index(
+    { voterId: 1, contestWeek: 1, photoId: 1 },
+    { unique: true }
+  )
+
+━━━ src/models/Notification.ts ━━━
+
+  const NotificationSchema = new Schema({
+    userId: {
+      type: Schema.Types.ObjectId, ref: 'User', required: true
+    },
+    type: {
+      type: String,
+      enum: ['photo_approved','photo_rejected','contest_won',
+             'contest_ending','vote_milestone','badge_earned','welcome'],
+      required: true
+    },
+    message: { type: String, required: true },
+    photoId: {
+      type: Schema.Types.ObjectId, ref: 'Photo', default: null
+    },
+    read: { type: Boolean, default: false },
+    createdAt: { type: Date, default: () => new Date() },
+  })
+  NotificationSchema.index({ userId: 1, read: 1, createdAt: -1 })
+  NotificationSchema.index(
+    { createdAt: 1 },
+    { expireAfterSeconds: 2592000 }
+  )
+
+━━━ src/models/Contact.ts ━━━
+
+  const ContactSchema = new Schema({
+    name: { type: String, required: true, trim: true },
+    email: {
+      type: String, required: true, trim: true, lowercase: true
+    },
+    message: { type: String, required: true },
+    submittedAt: { type: Date, default: () => new Date() },
+  })
+
+━━━ src/models/AdminLog.ts ━━━
+
+  const AdminLogSchema = new Schema({
+    adminId: {
+      type: Schema.Types.ObjectId, ref: 'User', required: true
+    },
+    action: { type: String, required: true },
+    targetType: {
+      type: String,
+      enum: ['photo','user','contestweek','photographer'],
+      default: null
+    },
+    targetId: {
+      type: Schema.Types.ObjectId, default: null
+    },
+    details: { type: String, default: '' },
+    createdAt: { type: Date, default: () => new Date() },
+  })
+  AdminLogSchema.index({ createdAt: -1 })
+
+════════════════════════════════════════════════════════════
+SEED SCRIPT — scripts/seed.ts
+════════════════════════════════════════════════════════════
+
+Run with: pnpm run seed
+Uses tsx. Must load .env.local with:
+  import * as dotenv from 'dotenv'
+  import { resolve } from 'path'
+  dotenv.config({ path: resolve(process.cwd(), '.env.local') })
+
+IMPORTANT: Import mongoose and define schemas inline in the seed script.
+Do NOT import from src/models — path aliases like @/ do not work in tsx
+script context. Redefine the schemas directly in the script.
+
+Steps the seed script MUST perform:
+1. Connect to MongoDB using MONGODB_URI from env
+2. Drop these collections if they exist:
+   photos, photographers, contestweeks, votes, users,
+   notifications, contacts, adminlogs
+3. Ensure all indexes are created (call ensureIndexes or use
+   createIndex on each model after defining schema)
+4. Insert 3 photographers:
+   - Rahim Uddin, wins 1, bio 'Street and documentary photographer
+     passionate about capturing the soul of Dhaka.'
+   - Karim Hossain, wins 1, bio 'Landscape and nature photographer
+     with a love for golden-hour light.'
+   - Nusrat Jahan, wins 1, bio 'Portrait photographer exploring
+     identity and expression through the lens.'
+   bestPhotoUrl for all three: 'https://res.cloudinary.com/demo/image/upload/sample.jpg'
+   bestPhotoPublicId: 'demo/sample'
+5. Hash passwords using bcrypt.hash(password, 12)
+6. Insert 2 users:
+   - admin@mupc.com / mupc2025 / role 'admin' / name 'MUPC Admin'
+     badges: ['welcome', 'veteran']
+   - member@mupc.com / member2025 / role 'member' / name 'Club Member'
+     badges: ['welcome']
+7. Insert ContestWeek 2025-W24:
+   isActive: false, winnersSelected: true
+   endDate: 7 days before now (new Date(Date.now() - 7*24*60*60*1000))
+8. Insert ContestWeek 2025-W25:
+   isActive: true, winnersSelected: false
+   endDate: 7 days from now (new Date(Date.now() + 7*24*60*60*1000))
+9. Insert 3 gallery photos for 2025-W24 (one per photographer):
+   type: 'gallery', status: 'approved', weekRank: 1/2/3
+   uploadedBy: the corresponding user._id (use member user for all seed photos)
+   cloudinaryUrl: 'https://res.cloudinary.com/demo/image/upload/sample.jpg'
+   cloudinaryPublicId: 'demo/sample'
+10. Insert 6 contest photos for 2025-W25 (2 per photographer):
+    type: 'contest', status: 'approved'
+    uploadedBy: member user _id
+    votes: [45, 38, 31, 22, 15, 0] one per photo
+    cloudinaryUrl: 'https://res.cloudinary.com/demo/image/upload/sample.jpg'
+11. Insert 2 welcome notifications (one per user)
+12. Print summary and disconnect
+
+════════════════════════════════════════════════════════════
+ALL API ROUTES — EXACT SPECIFICATIONS
+════════════════════════════════════════════════════════════
+
+━━━ PUBLIC ROUTES (no auth needed) ━━━
+
+GET /api/contest/active
+  connectToDatabase()
+  Find ContestWeek where isActive: true
+  Return the document or { activeWeek: null }
+
+GET /api/contest/photos
+  connectToDatabase()
+  Find active ContestWeek
+  If none: return { photos: [], activeWeek: null }
+  Find Photos where type:'contest', contestWeek: activeWeek.weekId,
+    status:'approved'
+  Sort by votes descending
+  Return { photos, activeWeek }
+
+GET /api/gallery
+  connectToDatabase()
+  const photographer = searchParams.get('photographer')
+  const tag = searchParams.get('tag')
+  Build filter: { type: 'gallery', status: 'approved' }
+  If photographer: add photographerName filter
+  If tag: add { tags: tag } filter
+  Sort by contestWeek desc, weekRank asc
+  Return { photos }
+
+GET /api/photographers
+  connectToDatabase()
+  Find all Photographers, sort by wins desc
+  Return { photographers }
+
+POST /api/contact
+  Parse body: { name, email, message }
+  Validate all fields present and email format valid
+  connectToDatabase()
+  Create Contact document
+  Return { success: true }
+
+PATCH /api/photos/[id]/view
+  connectToDatabase()
+  Photo.findByIdAndUpdate(id, { $inc: { views: 1 } })
+  Return { success: true }
+  If id is invalid ObjectId: return 400
+
+━━━ AUTHENTICATED ROUTES ━━━
+
+POST /api/upload
+  (Full implementation already specified in Cloudinary section above)
+  folder from formData, defaults to 'mupc/uploads'
+
+POST /api/contest/vote
+  getServerSession — return 401 if no session
+  Parse body: { photoId }
+  Validate photoId is a valid ObjectId
+  connectToDatabase()
+  Find active ContestWeek — return 404 if none
+  If winnersSelected: return 400 { error: 'Contest has ended' }
+  Find Photo by photoId — verify it exists and is approved and
+    contestWeek matches — return 404 if not
+  Check Vote exists: Vote.findOne({
+    voterId: session.user.id,
+    contestWeek: activeWeek.weekId,
+    photoId: photoId
+  })
+  If vote exists: return 409 { error: 'Already voted' }
+  Create Vote document
+  Increment photo votes: Photo.findByIdAndUpdate(photoId,
+    { $inc: { votes: 1 } }, { new: true })
+  Increment ContestWeek totalVotes: ContestWeek.findByIdAndUpdate(
+    activeWeek._id, { $inc: { totalVotes: 1 } })
+  Check if photo now has 50 votes — if so, create vote_milestone
+    notification for the photo uploader
+  Return { votes: updatedPhoto.votes, success: true }
+
+POST /api/contest/submit
+  getServerSession — return 401 if no session
+  If role === 'viewer': return 403 { error: 'Upgrade to member to submit' }
+  Parse body: { cloudinaryPublicId, cloudinaryUrl, title, tags }
+  Validate: cloudinaryPublicId and cloudinaryUrl and title are present
+  title must be 3-100 chars after trim
+  tags must be array, max 3 items
+  connectToDatabase()
+  Find active ContestWeek — return 404 if none
+  If winnersSelected: return 400 { error: 'Contest is closed' }
+  Find user name from database: User.findById(session.user.id).select('name')
+  Check existing submission:
+    const existing = await Photo.findOne({
+      uploadedBy: session.user.id,
+      contestWeek: activeWeek.weekId,
+      type: 'contest'
+    })
+    If exists: return 409 { error: 'You already submitted a photo this week' }
+  Create Photo:
+    {
+      cloudinaryPublicId,
+      cloudinaryUrl,
+      title: title.trim(),
+      photographerName: user.name,
+      uploadedBy: session.user.id,
+      type: 'contest',
+      contestWeek: activeWeek.weekId,
+      status: 'pending',
+      tags: tags || [],
+    }
+  Increment ContestWeek totalPhotos by 1
+  Check if user has 'first_upload' badge — if not, add it and create
+    badge_earned notification
+  Create notification for uploader: type 'photo_approved' is wrong here,
+    use a simple message: "Your photo '[title]' was submitted and is
+    pending review."
+  Return { success: true, photo: createdPhoto }
+
+GET /api/notifications
+  getServerSession — return 401 if no session
+  connectToDatabase()
+  Find Notification where userId: session.user.id
+  Sort by createdAt desc, limit 20
+  Return { notifications, unreadCount }
+
+PATCH /api/notifications/mark-all-read
+  getServerSession — return 401 if no session
+  connectToDatabase()
+  Notification.updateMany({ userId: session.user.id, read: false },
+    { $set: { read: true } })
+  Return { success: true }
+
+GET /api/dashboard/submissions
+  getServerSession — return 401 if no session
+  connectToDatabase()
+  Find all Photos where uploadedBy: session.user.id
+  Sort by uploadedAt desc
+  Return { submissions }
+
+PATCH /api/dashboard/profile
+  getServerSession — return 401 if no session
+  Parse body: { name, bio, profilePhotoUrl, profilePhotoPublicId }
+  Validate: name is present (2-60 chars), bio is max 300 chars
+  connectToDatabase()
+  Find current user to get old profilePhotoPublicId
+  If new profilePhotoPublicId provided and differs from old one:
+    Delete old image from Cloudinary (try/catch, ignore error)
+  Update user: { name, bio, profilePhotoUrl, profilePhotoPublicId }
+  Return { success: true }
+
+POST /api/bookmarks
+  getServerSession — return 401 if no session
+  Parse body: { photoId, action } — action is 'save' or 'unsave'
+  Validate photoId is valid ObjectId
+  connectToDatabase()
+  If action === 'save':
+    User.findByIdAndUpdate(session.user.id,
+      { $addToSet: { savedPhotos: photoId } })
+  If action === 'unsave':
+    User.findByIdAndUpdate(session.user.id,
+      { $pull: { savedPhotos: photoId } })
+  Return { success: true }
+
+━━━ ADMIN ROUTES (/api/admin/*) ━━━
+All admin routes: middleware already blocks non-admins at route level,
+but STILL verify session.user.role === 'admin' inside each route too.
+
+GET /api/admin/stats
+  connectToDatabase()
+  Run these queries in parallel with Promise.all:
+    - User.countDocuments({ role: { $ne: 'admin' } })
+    - Photo.countDocuments({ status: 'pending' })
+    - Photo.countDocuments({ type: 'contest', status: 'approved' })
+    - ContestWeek.findOne({ isActive: true })
+    - Vote.countDocuments()
+  Return all stats
+
+GET /api/admin/photos
+  connectToDatabase()
+  const status = searchParams.get('status')
+  const week = searchParams.get('week')
+  const page = parseInt(searchParams.get('page') || '1')
+  const limit = 20
+  Build filter object based on params
+  Find Photos with pagination, sort by uploadedAt desc
+  Return { photos, total, page, totalPages }
+
+PATCH /api/admin/photos/[id]/status
+  Parse body: { status } — must be 'approved' or 'rejected'
+  connectToDatabase()
+  Find photo by id — return 404 if not found
+  Update photo status
+  Create notification for uploader:
+    If approved: type 'photo_approved',
+      message "Your photo '[title]' was approved and is now live!"
+    If rejected: type 'photo_rejected',
+      message "Your photo '[title]' was not approved this round."
+  Create AdminLog entry
+  Return { success: true, photo: updatedPhoto }
+
+DELETE /api/admin/photos/[id]
+  connectToDatabase()
+  Find photo by id — return 404 if not found
+  Delete from Cloudinary (try/catch, log error but continue)
+  Delete Photo document from MongoDB
+  Create AdminLog entry
+  Return { success: true }
+
+GET /api/admin/users
+  connectToDatabase()
+  Find all users, select everything except password field:
+    User.find({}).select('-password').sort({ createdAt: -1 })
+  For each user, count their photos: use Promise.all with
+    Photo.countDocuments({ uploadedBy: user._id })
+  Return { users } with photo counts added
+
+PATCH /api/admin/users/[id]
+  Parse body: { role?, isActive? }
+  Prevent admin from modifying their own role or isActive
+  If changing role to non-admin, check this isn't the last admin:
+    const adminCount = await User.countDocuments({ role: 'admin' })
+    If adminCount <= 1 and current role is admin: return 400
+  connectToDatabase()
+  Update user fields
+  Create AdminLog entry
+  Return { success: true }
+
+DELETE /api/admin/users/[id]
+  Prevent admin from deleting themselves
+  connectToDatabase()
+
+  STEP 1: Check target is not the last admin
+  const targetUser = await User.findById(id)
+  If not found: return 404
+  If targetUser.role === 'admin':
+    const adminCount = await User.countDocuments({ role: 'admin' })
+    If adminCount <= 1: return 400 { error: 'Cannot delete the last admin' }
+
+  STEP 2: Find all photos by this user
+  const userPhotos = await Photo.find({ uploadedBy: id })
+    .select('cloudinaryPublicId')
+    .lean()
+
+  STEP 3: Delete all photos from Cloudinary
+  const cloudinaryDeletes = userPhotos.map(async (photo) => {
+    try {
+      await cloudinary.uploader.destroy(photo.cloudinaryPublicId)
+    } catch (err) {
+      console.error(`Failed to delete Cloudinary image
+        ${photo.cloudinaryPublicId}:`, err)
+    }
+  })
+  await Promise.all(cloudinaryDeletes)
+
+  STEP 4: Delete user's profile photo from Cloudinary if exists
+  if (targetUser.profilePhotoPublicId) {
+    try {
+      await cloudinary.uploader.destroy(targetUser.profilePhotoPublicId)
+    } catch (err) {
+      console.error('Failed to delete profile photo:', err)
+    }
+  }
+
+  STEP 5: Delete all MongoDB documents in this order
+  await Photo.deleteMany({ uploadedBy: id })
+  await Vote.deleteMany({ voterId: id })
+  await Notification.deleteMany({ userId: id })
+  const photographerDeleted = await Photographer.findOneAndDelete(
+    { userId: id }
+  )
+  await User.findByIdAndDelete(id)
+
+  STEP 6: Create AdminLog
+  await AdminLog.create({
+    adminId: session.user.id,
+    action: 'delete_user',
+    targetType: 'user',
+    targetId: id,
+    details: `Deleted user ${targetUser.email}.
+      Photos deleted: ${userPhotos.length}.
+      Photographer profile deleted: ${!!photographerDeleted}`
+  })
+
+  Return {
+    success: true,
+    deletedPhotos: userPhotos.length,
+    photographerDeleted: !!photographerDeleted,
+    message: `User and all associated data deleted successfully`
+  }
+
+GET /api/admin/contestweeks
+  connectToDatabase()
+  Find all ContestWeeks sort by createdAt desc
+  Return { contestWeeks }
+
+POST /api/admin/contestweeks
+  Parse body: { endDate }
+  Validate endDate is a future date
+  connectToDatabase()
+  Calculate weekId from endDate:
+    Use date-fns getYear and getISOWeek to build "YYYY-WNN" format
+  Check weekId doesn't already exist
+  Set all existing active weeks to isActive: false
+  Create new ContestWeek with isActive: true
+  Create AdminLog entry
+  Return { contestWeek: newWeek }
+
+PATCH /api/admin/contestweeks/[id]/close
+  connectToDatabase()
+  Find ContestWeek by id — return 404 if not found
+  If already winnersSelected: return 400 { error: 'Already closed' }
+
+  Find top 3 approved contest photos sorted by votes desc:
+    const winners = await Photo.find({
+      type: 'contest',
+      contestWeek: contestWeek.weekId,
+      status: 'approved'
+    }).sort({ votes: -1 }).limit(3)
+
+  For each winner (index 0, 1, 2):
+    weekRank = index + 1
+    Update photo: { type: 'gallery', weekRank }
+    Find or create Photographer by photographerName:
+      Photographer.findOneAndUpdate(
+        { name: winner.photographerName },
+        {
+          $inc: { wins: 1 },
+          $set: {
+            bestPhotoUrl: winner.cloudinaryUrl,
+            bestPhotoPublicId: winner.cloudinaryPublicId
+          }
+        },
+        { upsert: true, new: true }
+      )
+    Find the uploader user and award badge:
+      If weekRank === 1: award 'golden_frame' badge
+      If weekRank === 2: award 'silver_shutter' badge
+      If weekRank === 3: award 'bronze_lens' badge
+      Add badge with: User.findByIdAndUpdate(winner.uploadedBy,
+        { $addToSet: { badges: badgeName } })
+    Create notification for winner:
+      type: 'contest_won'
+      message: "🏆 Your photo '[title]' placed [1st/2nd/3rd] in
+        Week [weekId]! Congratulations!"
+
+  Update ContestWeek: { winnersSelected: true, isActive: false }
+  Create AdminLog entry
+  Return { success: true, winners: winnersData }
+
+GET /api/admin/photographers
+  connectToDatabase()
+  Find all Photographers sort by wins desc
+  Return { photographers }
+
+PATCH /api/admin/photographers/[id]
+  Parse body: { bio, bestPhotoUrl, bestPhotoPublicId, name }
+  connectToDatabase()
+  If bestPhotoPublicId provided and differs from current:
+    Delete old Cloudinary image (try/catch)
+  Update Photographer fields
+  Return { success: true }
+
+POST /api/admin/photographers
+  Parse body: { name, bio, bestPhotoUrl, bestPhotoPublicId, userId }
+  connectToDatabase()
+  Check name doesn't already exist
+  Create Photographer
+  Return { photographer }
+
+GET /api/admin/logs
+  connectToDatabase()
+  const page = parseInt(searchParams.get('page') || '1')
+  const limit = 30
+  Find AdminLogs with pagination, sort createdAt desc
+  Populate adminId with name and email fields only
+  Return { logs, total, page, totalPages }
+
+════════════════════════════════════════════════════════════
+PUBLIC PAGES — COMPLETE SPECIFICATIONS
+════════════════════════════════════════════════════════════
+
+━━━ HOME PAGE (/) ━━━
+
+Server component. Fetches: active contest week, latest 6 approved contest
+photos, latest 6 gallery photos, first 4 photographers.
+Use export const revalidate = 60
+
+Sections in order:
+
+HERO: Full-screen React Three Fiber scene (use client, dynamic import with
+ssr:false). 3D camera mesh using ONLY BoxGeometry and CylinderGeometry
+combined in a group — no external 3D files. Stars from drei. Ambient + point
+lights. Slow rotation animation with useFrame. Overlay text: club full name,
+tagline "Capturing Moments. Preserving Stories.", two buttons.
+Camera at position [0,0,5], fov 50. OrbitControls not included.
+Loading fallback: full-height dark div with spinner.
+
+WHO WE ARE: Two columns. Left: large display text quote about photography,
+stats row (6+ years, 100+ members, 500+ photos). Right: exact text:
+"We are the official photography club of Monipur Uccha Biddayala and College,
+Mirpur, Dhaka — a community of student photographers passionate about visual
+storytelling, documentary photography, and the art of the lens. Founded to
+nurture creative talent, we run weekly photo contests, maintain a curated
+archive of our best work, and celebrate the photographers who make it all
+possible."
+
+HISTORY: Horizontal scrollable film-strip timeline. Film sprocket holes via
+CSS before/after on container. Events with staggered Framer Motion entrance:
+2018 Club Founded, 2019 First Annual Exhibition, 2020 Weekly Online Contest
+Launched, 2022 Over 100 Members Reached, 2024 Digital Gallery Launched.
+
+CONTEST PREVIEW: Grid of up to 6 approved contest photos. Countdown timer
+to end date. "Vote Now" CTA to /contest.
+
+GALLERY PREVIEW: Latest 6 gallery photos in masonry layout.
+"View All" CTA to /gallery.
+
+PHOTOGRAPHERS PREVIEW: First 4 photographer cards. "View All" to /photographers.
+
+CONTACT: Two columns. Left: email, location, Facebook/Instagram links
+(placeholder hrefs). Right: form with name, email, message fields.
+POST to /api/contact. Show success/error feedback.
+
+FOOTER: Club name, tagline, all page nav links, social icons,
+copyright "© 2025 Monipur Uccha Biddayala Photography Club.
+All Rights Reserved."
+
+━━━ CONTEST PAGE (/contest) ━━━
+
+Client component. Fetches from /api/contest/photos on mount.
+Polls every 15 seconds to update vote counts.
+
+AT THE TOP if user is signed in with role 'member' or 'admin':
+Check if user already has a submission this week by looking in the
+fetched photos for uploadedBy matching session.user.id, OR make a
+separate call to /api/dashboard/submissions and filter for current week.
+
+If no submission yet:
+  Show upload card with:
+  - File input (styled, shows preview after file selected)
+  - Title text input
+  - Tag multi-select (max 3 from fixed list)
+  - Upload & Submit button
+  On submit:
+    1. POST file to /api/upload with folder 'mupc/contest'
+    2. Show upload progress (percent based on XHR or just spinner)
+    3. On upload success, POST to /api/contest/submit with returned
+       cloudinaryPublicId, cloudinaryUrl, title, tags
+    4. Show success state
+
+If submission exists:
+  Show submission preview card with image thumbnail, title, status badge,
+  and if approved: vote count.
+
+PHOTO GRID below the upload section:
+All approved contest photos sorted by votes desc.
+Each card: image (next/image), photographer name, title, vote count,
+animated progress bar (this photo's votes / total votes * 100),
+Vote button.
+Top 3 by votes get gold/silver/bronze crown badge overlaid on image.
+Vote button: POST to /api/contest/vote. Optimistic update (increment
+count immediately, rollback on error). Pulse animation ring on click.
+If not signed in: Vote button redirects to /signin?callbackUrl=/contest.
+If already voted for this photo: show "Voted ✓" disabled state.
+
+Track voted photos in local state: load from localStorage on mount
+(key: `mupc_voted_${weekId}`, value: array of photoIds).
+Add to localStorage after each successful vote.
+
+COUNTDOWN TIMER: Shows days:hours:minutes:seconds until endDate.
+Updates every second with useInterval or setInterval in useEffect.
+
+If winnersSelected is true: show banner "Contest Ended — Winners have
+been selected! View results in the Gallery."
+
+━━━ GALLERY PAGE (/gallery) ━━━
+
+Server fetches all gallery photos (type:'gallery', status:'approved').
+Client component for filters and lightbox.
+
+Filter bar: photographer name pills + tag pills. "All" resets.
+Multiple filters can be combined (photographer AND tag).
+
+Masonry grid layout. Each card: image, photographer name, title,
+week label, rank badge (1st/2nd/3rd), view count, tag pills.
+
+Click opens lightbox:
+- Full screen overlay (fixed, z-index 999)
+- Image centered with max dimensions
+- Prev/Next buttons (keyboard arrows + swipe on mobile)
+- Escape to close
+- Background click to close
+- Bottom bar: title, photographer name, week, rank
+- When opened: call PATCH /api/photos/[id]/view
+
+━━━ PHOTOGRAPHERS PAGE (/photographers) ━━━
+
+Server fetches all photographers + their gallery photos grouped.
+Client component for modal.
+
+Grid of photographer cards. Each: background image (bestPhotoUrl),
+name, wins badge, badges display, bio shown on hover.
+Click opens modal showing their winning photos.
+
+━━━ LEADERBOARD PAGE (/leaderboard) ━━━
+
+Three tabs: All Time / This Week / This Month.
+All Time: ranked table of photographers by wins, with total votes
+received (aggregate from their approved photos).
+This Week: live contest standings (client polls every 15s).
+This Month: computed from approved photos this calendar month.
+
+━━━ SIGN-IN PAGE (/signin) ━━━
+
+"use client" — Suspense wrapper around component using useSearchParams.
+Email + password fields. Show/hide password toggle.
+On submit: signIn('credentials', { email, password, redirect: false })
+Check result: if error, show "Invalid email or password."
+If success, check session.user.role.
+If role === 'admin': signOut() immediately, show error:
+"Admin accounts must use the Admin Portal. Please go to /bash-mubc-bash/login"
+(do NOT link to that URL — just show the text path)
+Otherwise: router.push(callbackUrl || '/contest')
+
+No registration link. No forgot password link. No admin link.
+
+━━━ MEMBER DASHBOARD (/dashboard) ━━━
+
+Protected. Client fetches from /api/dashboard/submissions.
+
+Tabs: My Submissions / My Wins / Saved Photos / Profile
+
+My Submissions: grid of all user's contest photo submissions across all
+weeks. Each shows: image, title, week, status badge, votes if approved.
+
+My Wins: filter submissions where weekRank is not null.
+
+Saved Photos: load user's savedPhotos, display as grid.
+
+Profile: show name, email, role, member since, badges as icon pills.
+Edit button opens modal: name field, bio field (300 char counter),
+profile photo upload (file input → /api/upload → /api/dashboard/profile).
+
+════════════════════════════════════════════════════════════
+ADMIN DASHBOARD (/bash-mubc-bash)
+════════════════════════════════════════════════════════════
+
+Entirely separate layout (src/app/bash-mubc-bash/layout.tsx).
+Own navigation — sidebar on desktop, top bar on mobile.
+Clean, minimal, functional aesthetic. Different from public site.
+No 3D effects. Minimal animations (opacity transitions only).
+Use a consistent table + card layout pattern.
+
+━━━ ADMIN LOGIN (/bash-mubc-bash/login) ━━━
+
+"use client" — Suspense wrapper.
+Shows ONLY: "MUPC Admin Portal" text, email field, password field,
+Sign In button, error message area.
+On submit: signIn('credentials', { email, password, redirect: false })
+If result.error: show "Invalid credentials"
+If success: check session.user.role
+If role !== 'admin': signOut() immediately, show "This portal is for
+  administrators only."
+If role === 'admin': router.push('/bash-mubc-bash')
+Middleware already redirects logged-in admins away from this page.
+
+━━━ OVERVIEW (/bash-mubc-bash) ━━━
+
+Stats cards: Total Members, Pending Photos (with alert if > 0),
+Active Contest Week info, Total Votes This Week, Total Gallery Photos.
+Recent activity from AdminLog (last 5 entries).
+Quick action buttons.
+
+━━━ PHOTOS (/bash-mubc-bash/photos) ━━━
+
+Table with bulk select checkboxes.
+Status filter tabs: All / Pending / Approved / Rejected.
+Week filter dropdown.
+Per-row actions: Approve, Reject, Delete.
+Bulk action bar (appears when items selected): Approve Selected,
+Reject Selected.
+When approving: PATCH status to 'approved', sends notification.
+When rejecting: PATCH status to 'rejected', sends notification.
+When deleting: DELETE (removes from Cloudinary + MongoDB).
+Confirmation dialog before any delete.
+
+━━━ CONTEST (/bash-mubc-bash/contest) ━━━
+
+Current week info card.
+Create New Week button → modal with end date picker.
+Close Week button (only when active week exists and not closed) →
+confirmation modal listing current top 3 → calls close endpoint.
+History list of all past weeks with winner thumbnails.
+
+━━━ USERS (/bash-mubc-bash/users) ━━━
+
+Table: avatar, name, email, role (dropdown to change inline),
+isActive (toggle switch), photo count, joined date, delete button.
+Cannot change own role or isActive.
+Delete button → DeleteUserModal:
+  Shows: user name, email, number of photos that will be deleted,
+  warning text "This action cannot be undone. All photos will be
+  permanently deleted from Cloudinary storage and MongoDB."
+  Requires typing the user's email to confirm.
+  On confirm: DELETE /api/admin/users/[id]
+  Shows result summary.
+
+━━━ PHOTOGRAPHERS (/bash-mubc-bash/photographers) ━━━
+
+Table of all photographers.
+Edit button → modal with bio textarea, photo upload for bestPhotoUrl.
+Add New button → modal with name, bio, photo upload.
+
+━━━ LOGS (/bash-mubc-bash/logs) ━━━
+
+Paginated table of admin activity log.
+Columns: time (relative), admin name, action, details.
+
+════════════════════════════════════════════════════════════
+PWA CONFIGURATION
+════════════════════════════════════════════════════════════
+
+next.config.js — use withPWA wrapper from next-pwa:
+  const withPWA = require('next-pwa')({
+    dest: 'public',
+    register: true,
+    skipWaiting: true,
+    disable: process.env.NODE_ENV === 'development',
+    buildExcludes: [/middleware-manifest\.json$/],
+  })
+
+public/manifest.json:
+  {
+    "name": "MUPC — Photography Club",
+    "short_name": "MUPC",
+    "description": "Monipur Uccha Biddayala Photography Club — Mirpur, Dhaka",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0A0A0A",
+    "theme_color": "#0A0A0A",
+    "orientation": "portrait-primary",
+    "scope": "/",
+    "lang": "en",
+    "icons": [
+      { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+      { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    ],
+    "categories": ["photography", "education", "social"]
+  }
+
+Create SVG-based placeholder icons at public/icons/icon-192.png and
+public/icons/icon-512.png (camera aperture design).
+
+In root layout <head>:
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0A0A0A" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MUPC" />
+  <meta name="viewport" content="width=device-width, initial-scale=1,
+    maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+
+════════════════════════════════════════════════════════════
+MOBILE-FIRST REQUIREMENTS — ALL ARE MANDATORY
+════════════════════════════════════════════════════════════
+
+Bottom navigation bar (mobile only, hidden on md: and above):
+  Fixed at bottom, z-50, glassmorphism background.
+  5 tabs: Home (house icon), Contest (camera icon), Gallery (image icon),
+  Photographers (users icon), Menu (grid icon → opens drawer for
+  Dashboard, Leaderboard, Sign In/Out, Notification bell).
+  Active tab highlighted with accent color.
+  Hides when user scrolls down, shows when scrolls up (useScrollDirection hook).
+
+All touch targets minimum 44x44px.
+No hover-only interactions — all must work on tap.
+Swipe left/right in lightbox using touch events.
+Swipe down to close bottom sheets and modals.
+All modals on mobile render as bottom-sheet drawers (slide up from bottom).
+On desktop same modals render as centered dialogs.
+Forms: correct inputMode and type attributes on all inputs.
+No text below 14px on any mobile screen.
+No horizontal overflow on any mobile screen (check at 320px width).
+next/image with proper sizes for each breakpoint.
+
+════════════════════════════════════════════════════════════
+NEXT.JS CONFIG — next.config.js
+════════════════════════════════════════════════════════════
+
+const withPWA = require('next-pwa')({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+})
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+        pathname: '/**',
+      },
+    ],
+  },
+  experimental: {
+    serverComponentsExternalPackages: ['mongoose', 'cloudinary'],
+  },
+}
+
+module.exports = withPWA(nextConfig)
+
+════════════════════════════════════════════════════════════
+ABSOLUTE RULES — VIOLATIONS WILL BREAK THE APP
+════════════════════════════════════════════════════════════
+
+1. Every file that uses useState, useEffect, useRef, Framer Motion,
+   React Three Fiber, useSession, useRouter, usePathname,
+   useSearchParams, or any React hook MUST have "use client" as the
+   absolute first line before any imports.
+
+2. Every Mongoose model MUST use:
+   const Model = mongoose.models.Name || mongoose.model('Name', schema)
+
+3. NEVER import cloudinary (the npm package) in any "use client" file.
+   It is a Node.js package and will crash the browser build.
+
+4. NEVER import mongoose or any MongoDB model in any "use client" file.
+   Always use fetch() to call your own API routes from client components.
+
+5. ALWAYS serialize MongoDB data before passing to client components:
+   JSON.parse(JSON.stringify(data))
+
+6. The /api/cloudinary/sign route DOES NOT EXIST in this app.
+   All uploads go through /api/upload using server-side Cloudinary SDK.
+
+7. Admin login is ONLY at /bash-mubc-bash/login.
+   The public /signin page blocks admin accounts.
+   No link to the admin login exists anywhere on the public site.
+
+8. The cascade delete must delete Cloudinary images BEFORE deleting
+   MongoDB documents. Never delete the database record without trying
+   to clean up Cloudinary first.
+
+9. One photo per user per contest week. Check this with an explicit
+   database query in the API before creating the document. Do not
+   rely on uniqueness alone since the photo type must also match.
+
+10. All API routes that modify data must create an AdminLog entry
+    if they are admin routes.
+
+11. The pnpm run build must complete with zero TypeScript errors
+    and zero Next.js build errors.
+
+12. Never hardcode any credentials, API keys, or secrets in source
+    code. All sensitive values must come from process.env.
+
+13. All error responses from API routes must be JSON with an
+    'error' string field and the correct HTTP status code.
+
+14. Mongoose connection uses global cache. Never open multiple
+    connections. The connectToDatabase() function in lib/mongodb.ts
+    is the ONLY place mongoose.connect() is called.
+
+15. In seed.ts, define schemas inline — never import from src/models
+    because @/ path aliases don't resolve in tsx script context.
+
+════════════════════════════════════════════════════════════
+README.md MUST INCLUDE
+════════════════════════════════════════════════════════════
+
+Setup steps for Replit (environment variables via Secrets panel)
+All 7 environment variables with descriptions
+How to run seed script: pnpm run seed
+Seeded test accounts:
+  admin@mupc.com / mupc2025 — Admin Portal only
+  member@mupc.com / member2025 — Public sign-in
+Admin dashboard URL: /bash-mubc-bash
+Admin login URL: /bash-mubc-bash/login (SEPARATE from public login)
+Note: Admin cannot log in from /signin — will be blocked
+pnpm run build instructions
+Capacitor APK conversion steps:
+  Step 1: pnpm add @capacitor/core @capacitor/cli @capacitor/android
+  Step 2: npx cap init "MUPC" "com.mupc.photographyclub"
+  Step 3: pnpm run build
+  Step 4: npx cap add android
+  Step 5: npx cap sync
+  Step 6: npx cap open android (build APK from Android Studio)
+Cloudinary note: No dashboard setup needed. App uses only the
+4 Cloudinary environment variables — nothing else required.
+
+════════════════════════════════════════════════════════════
+BUILD THIS NOW. ZERO MISTAKES. ZERO BUILD ERRORS.
+TEST EVERY FEATURE IN YOUR HEAD BEFORE WRITING IT.
+IF UNSURE ABOUT ANYTHING, USE THE SIMPLER APPROACH.
+════════════════════════════════════════════════════════════

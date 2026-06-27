@@ -1,0 +1,10 @@
+- [ ] Create `.env.local` at the root with environment variables from `.replit`
+- [ ] Move files and folders from `artifacts/mupc` to root
+- [ ] Delete unused workspace directories (`artifacts`, `lib`, root `scripts`)
+- [ ] Remove old workspace configurations (`pnpm-workspace.yaml`, `tsconfig.base.json`, `.replit`, `.replitignore`, `replit.md`, `.npmrc`)
+- [ ] Remove Vite/Replit stubs and assets (`index.html`, `vite.config.ts`, `src/App.tsx`, `src/main.tsx`, `src/pages/`)
+- [ ] Modify `package.json` to rename project and update scripts
+- [ ] Modify `src/components/ui/button.tsx` to clean up `@replit` comments
+- [ ] Modify `src/components/ui/badge.tsx` to clean up `@replit` comments
+- [ ] Run `pnpm install` in the root
+- [ ] Build the Next.js production app and verify no errors

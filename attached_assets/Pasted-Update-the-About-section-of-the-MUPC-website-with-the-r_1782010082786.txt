@@ -1,0 +1,172 @@
+Update the About section of the MUPC website with the real club information
+below. Remove ALL old placeholder/generic text from the About section,
+Who We Are section, and the History timeline. Replace with the actual
+accurate information provided. Keep the same design quality and layout
+structure — only the content changes.
+
+════════════════════════════════════════════════════════════
+CLUB FOUNDER
+════════════════════════════════════════════════════════════
+
+Name: Sifat Rahman
+Current Status: Actor — played the role of Shakil in the drama
+"Banalata Express"
+Education: Currently a student at the University of Dhaka (DU),
+Department of Film and Photography
+
+Display this on a dedicated "Meet the Founder" card or subsection
+inside the About page or section. Show name, role, and a short
+description of his background.
+
+════════════════════════════════════════════════════════════
+CLUB MODERATORS
+════════════════════════════════════════════════════════════
+
+Three moderators. Display each as a card with name, department,
+and branch label.
+
+1. Md Anwar Hossain
+   Role: Head of Bangla Department
+   Branch: Boys Branch
+
+2. Ayesha Siddiqua
+   Role: Lecturer, Biology Department
+   Branch: Boys Branch
+
+3. Shapan Kumar Sutradhar
+   Role: Lecturer, Higher Mathematics Department
+   Branch: Girls Branch
+
+════════════════════════════════════════════════════════════
+HISTORY TIMELINE
+════════════════════════════════════════════════════════════
+
+Remove the old timeline entries entirely.
+Replace with these exact events in chronological order:
+
+2017 — Club Founded
+"MUPC was founded in 2017 under Branch 1 (Boys) by Sifat Rahman,
+laying the foundation for a student-led photography community
+at Monipur Uccha Biddayala and College."
+
+2024 — Official College Recognition
+"After the historic July Movement of 2024, MUPC received official
+recognition in the College branch, endorsed by the College founding
+panel and its moderators — marking a new chapter for the club."
+
+2024 — First College Auditorium Session
+"MUPC hosted its landmark first session in the College Auditorium.
+The session was hosted by Fairooz Anika and conducted by
+Muhammad Afif Haider on the topic: Basics of Video Editing."
+
+2025 — Best Club Partner Award
+"MUPC was awarded Best Club Partner at GSCPC Reflections 2.0,
+recognising the club's collaborative spirit and excellence."
+
+2025 — Best Club Award at NDC
+"MUPC won the Best Club Award at NDC 9th National Cultural
+Jubilation 2025 — a landmark achievement for the club."
+
+2025 — Club Representatives Honoured
+"Muhammad Afif Haider represented MUPC at the NDC Cultural Club
+2025. Taharat Tasnim Raya represented the club at Frame the
+Moment Season 4, 2025."
+
+Present — Growing Strong
+"With 20+ event covers, multiple citywide photowalks, and a
+passionate community of student photographers, MUPC continues
+to grow as one of the most active student clubs in Mirpur, Dhaka."
+
+════════════════════════════════════════════════════════════
+WHO WE ARE SECTION — REPLACE BODY TEXT
+════════════════════════════════════════════════════════════
+
+Replace the old body text with this exact text:
+
+"We are the official photography club of Monipur Uccha Biddayala
+and College, Mirpur, Dhaka — founded in 2017 by Sifat Rahman under
+the Boys Branch. After the July Movement of 2024, we received
+official college recognition and expanded our reach across both
+branches of the institution.
+
+From our first session on video editing basics in the College
+Auditorium, to winning Best Club at NDC 9th National Cultural
+Jubilation 2025 and Best Club Partner at GSCPC Reflections 2.0 —
+MUPC has grown into one of the most recognised student photography
+clubs in Dhaka. Our members have represented the club at national
+competitions, conducted 20+ event covers, and organised multiple
+photowalks across the city.
+
+We run weekly photo contests, maintain a curated digital archive
+of our best work, and celebrate the photographers who make it all
+possible."
+
+════════════════════════════════════════════════════════════
+ACHIEVEMENTS SECTION
+════════════════════════════════════════════════════════════
+
+Add a dedicated Achievements subsection inside the About area
+(between Who We Are and the History timeline, or after the
+timeline — whichever fits the design better).
+
+Display these as styled achievement cards or a trophy row:
+
+🏆 Best Club Partner Award
+   GSCPC Reflections 2.0
+
+🏆 Best Club Award
+   NDC 9th National Cultural Jubilation 2025
+
+🎖️ Club Representative
+   Muhammad Afif Haider — NDC Cultural Club 2025
+
+🎖️ Club Representative
+   Taharat Tasnim Raya — Frame the Moment Season 4, 2025
+
+📷 20+ Event Covers
+
+🚶 Multiple Photowalks Conducted
+
+════════════════════════════════════════════════════════════
+HISTORY SECTION STATS ROW — UPDATE NUMBERS
+════════════════════════════════════════════════════════════
+
+Update the stats displayed near the Who We Are section:
+
+Founded: 2017
+Recognition: 2024
+Awards: 2+
+Event Covers: 20+
+
+Replace the old stats (6+ years, 100+ members, 500+ photos) with:
+8+ Years Active | Officially Recognised 2024 | 2 Major Awards | 20+ Events
+
+════════════════════════════════════════════════════════════
+IMPORTANT NOTES
+════════════════════════════════════════════════════════════
+
+1. Do not change any other part of the website — only the About,
+   Who We Are, History, and Achievements content.
+
+2. Do not change any design, colors, animations, or layout structure.
+   Only the text content and data are being updated.
+
+3. Keep all Framer Motion animations and scroll reveals exactly as they are.
+
+4. The History timeline still uses the horizontal film-strip design —
+   just replace the event data with the new events above.
+
+5. Moderator names must be spelled exactly as given:
+   Md Anwar Hossain, Ayesha Siddiqua, Shapan Kumar Sutradhar.
+
+6. Founder name must be spelled exactly: Sifat Rahman.
+
+7. Drama name spelled exactly: Banalata Express.
+
+8. Character name spelled exactly: Shakil.
+
+9. NDC award spelled exactly: NDC 9th National Cultural Jubilation 2025.
+
+10. Competition names spelled exactly:
+    GSCPC Reflections 2.0
+    Frame the Moment Season 4
