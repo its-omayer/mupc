@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, ChevronLeft, ChevronRight, BookmarkPlus, Eye, Crown, Camera, Filter } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, BookmarkPlus, Eye, Crown, Camera, Filter, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
@@ -12,30 +12,70 @@ import Footer from '@/components/Footer'
 export default function GalleryPage() {
   const { data: session } = useSession()
   const [photos, setPhotos] = useState<any[]>([])
+  const [groupedPhotos, setGroupedPhotos] = useState<Record<string, any[]>>({})
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [lightboxPhoto, setLightboxPhoto] = useState<any | null>(null)
+  const cacheKeyRef = useRef<string>(new Date().getTime().toString())
 
   const allTags = ['Street', 'Portrait', 'Landscape', 'Architecture', 'Wildlife', 'Abstract', 'Documentary', 'Night']
 
-  useEffect(() => {
-    const fetchPhotos = async () => {
-      setLoading(true)
-      try {
-        const url = selectedTag ? `/api/gallery?tag=${selectedTag}` : '/api/gallery'
-        const res = await fetch(url)
-        if (res.ok) {
-          const d = await res.json()
-          setPhotos(d.photos || [])
+  const fetchPhotos = useCallback(async (busted: boolean = false) => {
+    const isRefresh = busted || refreshing
+    if (!isRefresh) setLoading(true)
+    if (isRefresh) setRefreshing(true)
+    
+    try {
+      // Add cache-busting query parameter to force fresh data
+      const cacheBuster = busted ? `&t=${new Date().getTime()}` : ''
+      const url = selectedTag 
+        ? `/api/gallery?tag=${selectedTag}${cacheBuster}` 
+        : `/api/gallery${cacheBuster}`
+      
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
         }
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
+      })
+      
+      if (res.ok) {
+        const d = await res.json()
+        setPhotos(d.photos || [])
+        setGroupedPhotos(d.grouped || {})
+        if (busted && isRefresh) {
+          toast.success('Gallery refreshed!')
+        }
       }
+    } catch (err) {
+      console.error(err)
+      if (isRefresh) {
+        toast.error('Failed to refresh gallery')
+      }
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-    fetchPhotos()
+  }, [selectedTag, refreshing])
+
+  // Initial fetch
+  useEffect(() => {
+    fetchPhotos(false)
   }, [selectedTag])
+
+  // Poll for new photos every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchPhotos(true)
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [fetchPhotos])
+
+  const handleManualRefresh = async () => {
+    await fetchPhotos(true)
+  }
 
   const openLightbox = async (photo: any) => {
     setLightboxPhoto(photo)
@@ -84,15 +124,32 @@ export default function GalleryPage() {
 
   const currentIndex = lightboxPhoto ? photos.findIndex(p => p._id === lightboxPhoto._id) : -1
 
+  // Sort weeks in descending order (newest first)
+  const sortedWeeks = Object.keys(groupedPhotos).sort((a, b) => {
+    if (a === 'Uncategorized') return 1
+    if (b === 'Uncategorized') return -1
+    return b.localeCompare(a)
+  })
+
   return (
     <main className="min-h-screen bg-[#0a0a0f] text-white">
       <Navbar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-24">
         <div className="flex flex-col gap-4 mb-8 md:mb-10">
-          <div>
-            <h1 className="font-cinzel text-3xl sm:text-4xl md:text-5xl font-bold mb-3 gradient-text">Community Gallery</h1>
-            <p className="text-gray-400 text-sm md:text-base max-w-xl">Explore the finest work from our club members, curated from past weekly contests.</p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="font-cinzel text-3xl sm:text-4xl md:text-5xl font-bold mb-3 gradient-text">Community Gallery</h1>
+              <p className="text-gray-400 text-sm md:text-base max-w-xl">Explore the finest work from our club members, curated from past weekly contests.</p>
+            </div>
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-lg transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
           </div>
 
           {/* Tag filters - horizontally scrollable on mobile */}
@@ -126,29 +183,58 @@ export default function GalleryPage() {
             ))}
           </div>
         ) : photos.length > 0 ? (
-          <div className="columns-2 sm:columns-2 md:columns-3 lg:columns-4 gap-3 sm:gap-4 space-y-3 sm:space-y-4">
-            {photos.map((photo, i) => (
+          <div className="space-y-12">
+            {sortedWeeks.map((week) => (
               <motion.div
+                key={week}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-                key={photo._id}
-                className="relative break-inside-avoid rounded-lg sm:rounded-xl overflow-hidden group cursor-pointer"
-                onClick={() => openLightbox(photo)}
+                className="space-y-4"
               >
-                <img
-                  src={photo.cloudinaryUrl}
-                  alt={photo.title}
-                  className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105"
-                  loading="lazy"
-                />
-                {photo.weekRank && getRankBadge(photo.weekRank)}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2 sm:p-4">
-                  <h3 className="text-white font-medium text-xs sm:text-sm truncate">{photo.title}</h3>
-                  <div className="flex items-center text-amber-500/80 text-xs">
-                    <Camera className="w-3 h-3 mr-1 flex-none" />
-                    <span className="truncate">{photo.photographerName}</span>
-                  </div>
+                <div className="flex items-center gap-3 pb-4 border-b border-white/10">
+                  <h2 className="text-xl md:text-2xl font-bold text-amber-500">
+                    {week === 'Uncategorized' ? 'Gallery Submissions' : `Contest Week ${week.split('-')[1] || week}`}
+                  </h2>
+                  <span className="text-sm text-gray-400">
+                    {groupedPhotos[week].length} photo{groupedPhotos[week].length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                
+                <div className="columns-2 sm:columns-2 md:columns-3 lg:columns-4 gap-3 sm:gap-4 space-y-3 sm:space-y-4">
+                  {groupedPhotos[week].map((photo, i) => (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                      key={photo._id}
+                      className="relative break-inside-avoid rounded-lg sm:rounded-xl overflow-hidden group cursor-pointer"
+                      onClick={() => openLightbox(photo)}
+                    >
+                      <img
+                        src={photo.cloudinaryUrl}
+                        alt={photo.title}
+                        className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                      {photo.weekRank && getRankBadge(photo.weekRank)}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2 sm:p-4">
+                        <h3 className="text-white font-medium text-xs sm:text-sm truncate">{photo.title}</h3>
+                        <div className="flex items-center text-amber-500/80 text-xs">
+                          <Camera className="w-3 h-3 mr-1 flex-none" />
+                          <span className="truncate">{photo.photographerName}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Photo link indicator */}
+                      <Link
+                        href={`/photos/${photo._id}`}
+                        className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-amber-500 text-black p-2 rounded-full hover:bg-amber-600"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Link>
+                    </motion.div>
+                  ))}
                 </div>
               </motion.div>
             ))}
