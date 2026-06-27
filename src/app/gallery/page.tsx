@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ChevronLeft, ChevronRight, BookmarkPlus, Eye, Crown, Camera, Filter } from 'lucide-react'
@@ -261,6 +262,13 @@ export default function GalleryPage() {
                   ))}
                 </div>
               )}
+
+              <Link
+                href={`/photos/${lightboxPhoto._id}`}
+                className="w-full py-2.5 md:py-3 bg-amber-500 hover:bg-amber-600 text-black rounded-lg flex items-center justify-center font-bold transition-colors text-sm"
+              >
+                <Eye className="w-4 h-4 mr-2" /> View Full Photo
+              </Link>
 
               <button
                 onClick={handleBookmark}

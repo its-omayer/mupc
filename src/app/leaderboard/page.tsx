@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Trophy, Medal, Star, Flame, Crown } from 'lucide-react'
 import Navbar from '@/components/Navbar'
@@ -157,15 +158,17 @@ export default function LeaderboardPage() {
                 {currentWeek.map((photo, index) => {
                   const rank = index + 1
                   return (
-                    <div key={photo._id} className="flex items-center p-4 bg-[#111118] border border-white/5 rounded-xl">
+                    <div key={photo._id} className="flex items-center p-4 bg-[#111118] border border-white/5 rounded-xl group">
                       <div className="w-8 font-cinzel text-xl font-bold text-gray-500 text-center mr-4">
                         {rank}
                       </div>
-                      <div className="w-20 h-20 rounded-lg overflow-hidden shrink-0">
+                      <Link href={`/photos/${photo._id}`} className="w-20 h-20 rounded-lg overflow-hidden shrink-0 hover:opacity-80 transition-opacity">
                         <img src={photo.cloudinaryUrl} alt={photo.title} className="w-full h-full object-cover" />
-                      </div>
+                      </Link>
                       <div className="ml-4 flex-1">
-                        <h3 className="text-lg font-medium text-white">{photo.title}</h3>
+                        <Link href={`/photos/${photo._id}`} className="hover:text-amber-500 transition-colors">
+                          <h3 className="text-lg font-medium text-white">{photo.title}</h3>
+                        </Link>
                         <p className="text-sm text-gray-400">by {photo.photographerName}</p>
                       </div>
                       <div className="text-right">
@@ -199,20 +202,22 @@ export default function LeaderboardPage() {
                     </div>
                     <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                       {groupedPast[weekId].sort((a: any, b: any) => (a.weekRank || 99) - (b.weekRank || 99)).map((photo: any) => (
-                        <div key={photo._id} className="relative group rounded-lg overflow-hidden border border-white/10">
-                          <div className="aspect-[4/3]">
-                            <img src={photo.cloudinaryUrl} alt={photo.title} className="w-full h-full object-cover" />
-                          </div>
-                          <div className="absolute top-2 left-2 flex items-center bg-black/80 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                            {photo.weekRank === 1 && <Crown className="w-4 h-4 text-amber-400 mr-2" />}
-                            {photo.weekRank === 2 && <Crown className="w-4 h-4 text-gray-300 mr-2" />}
-                            {photo.weekRank === 3 && <Crown className="w-4 h-4 text-amber-700 mr-2" />}
-                            <span className="text-white font-bold text-sm">Rank #{photo.weekRank}</span>
-                          </div>
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-4">
-                            <p className="text-white font-medium truncate">{photo.title}</p>
-                            <p className="text-amber-500/80 text-sm truncate">{photo.photographerName}</p>
-                          </div>
+                        <div key={photo._id} className="relative group rounded-lg overflow-hidden border border-white/10 bg-[#0f0f14]">
+                          <Link href={`/photos/${photo._id}`}>
+                            <div className="aspect-[4/3] overflow-hidden">
+                              <img src={photo.cloudinaryUrl} alt={photo.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                            </div>
+                            <div className="absolute top-2 left-2 flex items-center bg-black/80 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 z-10">
+                              {photo.weekRank === 1 && <Crown className="w-4 h-4 text-amber-400 mr-2" />}
+                              {photo.weekRank === 2 && <Crown className="w-4 h-4 text-gray-300 mr-2" />}
+                              {photo.weekRank === 3 && <Crown className="w-4 h-4 text-amber-700 mr-2" />}
+                              <span className="text-white font-bold text-sm">Rank #{photo.weekRank}</span>
+                            </div>
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-4 z-10">
+                              <p className="text-white font-medium truncate group-hover:text-amber-500 transition-colors">{photo.title}</p>
+                              <p className="text-amber-500/80 text-sm truncate">by {photo.photographerName}</p>
+                            </div>
+                          </Link>
                         </div>
                       ))}
                     </div>

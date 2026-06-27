@@ -5,6 +5,29 @@ import { connectToDatabase } from '@/lib/mongodb'
 import User from '@/models/User'
 import cloudinary from '@/lib/cloudinary'
 
+export const dynamic = 'force-dynamic'
+
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    await connectToDatabase()
+    const user = await User.findById(session.user.id)
+      .select('name bio email profilePhotoUrl profilePhotoPublicId badges savedPhotos')
+      .populate({
+        path: 'savedPhotos',
+        select: 'cloudinaryUrl title photographerName votes views tags uploadedAt type contestWeek weekRank',
+      })
+      .lean()
+    return NextResponse.json(JSON.parse(JSON.stringify(user)))
+  } catch (error) {
+    console.error('[API /dashboard/profile GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 })
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)

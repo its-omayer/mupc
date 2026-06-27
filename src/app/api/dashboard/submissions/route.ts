@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { connectToDatabase } from '@/lib/mongodb'
 import Photo from '@/models/Photo'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)

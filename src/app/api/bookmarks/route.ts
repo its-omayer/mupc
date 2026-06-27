@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { photoId, action } = body
+    const { photoId, action = 'save' } = body
 
     if (!photoId || !mongoose.Types.ObjectId.isValid(photoId)) {
       return NextResponse.json({ error: 'Invalid photoId' }, { status: 400 })

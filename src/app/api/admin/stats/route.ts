@@ -7,6 +7,8 @@ import Photo from '@/models/Photo'
 import ContestWeek from '@/models/ContestWeek'
 import Vote from '@/models/Vote'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)

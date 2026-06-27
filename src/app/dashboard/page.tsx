@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Camera, Image as ImageIcon, Bell, Settings, Award, CheckCircle, XCircle, Clock, BookmarkPlus, Upload } from 'lucide-react'
+import Link from 'next/link'
+import { Camera, Image as ImageIcon, Bell, Settings, Award, CheckCircle, XCircle, Clock, BookmarkPlus, Eye, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
@@ -204,15 +205,22 @@ export default function DashboardPage() {
               {submissions.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {submissions.map(photo => (
-                    <div key={photo._id} className="bg-[#111118] border border-white/5 rounded-xl overflow-hidden">
-                      <div className="aspect-[4/3] relative">
-                        <img src={photo.cloudinaryUrl} alt={photo.title} className="w-full h-full object-cover" />
-                        <div className="absolute top-2 right-2">
-                          {getStatusBadge(photo.status)}
+                    <div key={photo._id} className="bg-[#111118] border border-white/5 rounded-xl overflow-hidden group">
+                      <Link href={`/photos/${photo._id}`} className="block">
+                        <div className="aspect-[4/3] relative overflow-hidden">
+                          <img src={photo.cloudinaryUrl} alt={photo.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <div className="absolute top-2 right-2">
+                            {getStatusBadge(photo.status)}
+                          </div>
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Eye className="w-6 h-6 text-white" />
+                          </div>
                         </div>
-                      </div>
+                      </Link>
                       <div className="p-3 md:p-4">
-                        <h3 className="font-medium text-white truncate text-sm md:text-base">{photo.title}</h3>
+                        <Link href={`/photos/${photo._id}`}>
+                          <h3 className="font-medium text-white truncate text-sm md:text-base hover:text-amber-500 transition-colors">{photo.title}</h3>
+                        </Link>
                         <div className="flex justify-between items-center mt-1.5 text-xs text-gray-400">
                           <span>{photo.type === 'contest' ? `Week ${photo.contestWeek?.split('-')[1] || ''}` : 'Gallery'}</span>
                           <span>{photo.votes} votes</span>
@@ -314,12 +322,47 @@ export default function DashboardPage() {
 
           {/* Bookmarks Tab */}
           {activeTab === 'bookmarks' && (
-            <div className="text-center py-16 md:py-20 bg-[#111118] rounded-xl border border-white/5">
-              <BookmarkPlus className="w-10 h-10 md:w-12 md:h-12 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400 text-sm md:text-base">Bookmarked photos will appear here.</p>
-              <a href="/gallery" className="mt-3 inline-block text-amber-500 hover:text-amber-400 text-sm transition-colors">
-                Browse Gallery →
-              </a>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-500">{(profile?.savedPhotos || []).length} saved photo{(profile?.savedPhotos || []).length !== 1 ? 's' : ''}</p>
+                <Link href="/gallery" className="text-sm text-amber-500 hover:text-amber-400 transition-colors">
+                  Browse Gallery →
+                </Link>
+              </div>
+
+              {(profile?.savedPhotos || []).length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {(profile.savedPhotos as any[]).map((photo: any) => (
+                    <div key={photo._id} className="bg-[#111118] border border-white/5 rounded-xl overflow-hidden group">
+                      <Link href={`/photos/${photo._id}`} className="block">
+                        <div className="aspect-[4/3] relative overflow-hidden">
+                          <img src={photo.cloudinaryUrl} alt={photo.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Eye className="w-6 h-6 text-white" />
+                          </div>
+                        </div>
+                      </Link>
+                      <div className="p-3 md:p-4">
+                        <Link href={`/photos/${photo._id}`}>
+                          <h3 className="font-medium text-white truncate text-sm md:text-base hover:text-amber-500 transition-colors">{photo.title}</h3>
+                        </Link>
+                        <div className="flex justify-between items-center mt-1.5 text-xs text-gray-400">
+                          <span className="flex items-center gap-1"><Camera className="w-3 h-3" /> {photo.photographerName}</span>
+                          <span>{photo.votes} votes</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-16 md:py-20 bg-[#111118] rounded-xl border border-white/5">
+                  <BookmarkPlus className="w-10 h-10 md:w-12 md:h-12 text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-400 text-sm md:text-base">No saved photos yet.</p>
+                  <Link href="/gallery" className="mt-3 inline-block text-amber-500 hover:text-amber-400 text-sm transition-colors">
+                    Browse Gallery →
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 

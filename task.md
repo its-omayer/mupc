@@ -1,10 +1,10 @@
-- [ ] Create `.env.local` at the root with environment variables from `.replit`
-- [ ] Move files and folders from `artifacts/mupc` to root
-- [ ] Delete unused workspace directories (`artifacts`, `lib`, root `scripts`)
-- [ ] Remove old workspace configurations (`pnpm-workspace.yaml`, `tsconfig.base.json`, `.replit`, `.replitignore`, `replit.md`, `.npmrc`)
-- [ ] Remove Vite/Replit stubs and assets (`index.html`, `vite.config.ts`, `src/App.tsx`, `src/main.tsx`, `src/pages/`)
-- [ ] Modify `package.json` to rename project and update scripts
-- [ ] Modify `src/components/ui/button.tsx` to clean up `@replit` comments
-- [ ] Modify `src/components/ui/badge.tsx` to clean up `@replit` comments
-- [ ] Run `pnpm install` in the root
-- [ ] Build the Next.js production app and verify no errors
+- [x] Fix static dynamic route rendering issue by adding `export const dynamic = 'force-dynamic'` to API GET routes
+- [x] Remove separate portal redirect from signin page and handle role-based redirection on the sign-in page
+- [x] Create MongoDB GET endpoint `/api/photos/[id]`
+- [x] Create photo details page `/photos/[id]/page.tsx`
+- [x] Integrate view details page link into Gallery page lightbox
+- [/] Integrate view details page links into Leaderboard page photos
+- [ ] Update Dashboard page to show click-to-view links and implement user Saved/Bookmarks list grid
+- [ ] Implement GET method on `/api/dashboard/profile` to return populated savedPhotos
+- [ ] Fix bookmarks API route to default to 'save' and support both save/unsave toggling
+- [ ] Run `pnpm run build` to verify the production build compiles successfully

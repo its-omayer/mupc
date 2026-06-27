@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, Suspense } from 'react'
-import { signIn } from 'next-auth/react'
+import { signIn, getSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Camera } from 'lucide-react'
@@ -36,7 +36,9 @@ function SignInContent() {
         }
       } else {
         toast.success('Successfully signed in!')
-        router.push(callbackUrl)
+        const session = await getSession()
+        const targetUrl = session?.user?.role === 'admin' ? '/bash-mubc-bash' : callbackUrl
+        router.push(targetUrl)
         router.refresh()
       }
     } catch (err) {
@@ -102,12 +104,9 @@ function SignInContent() {
           </form>
 
           <div className="mt-8 pt-6 border-t border-amber-500/10 text-center">
-            <p className="text-sm text-gray-400 mb-2">
+            <p className="text-sm text-gray-400">
               New member? Contact an administrator to register.
             </p>
-            <Link href="/bash-mubc-bash/login" className="text-xs text-amber-500/60 hover:text-amber-500 transition-colors">
-              Admins use a separate portal
-            </Link>
           </div>
         </div>
       </motion.div>

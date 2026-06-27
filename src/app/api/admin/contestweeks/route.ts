@@ -6,6 +6,8 @@ import ContestWeek from '@/models/ContestWeek'
 import AdminLog from '@/models/AdminLog'
 import { getYear, getISOWeek } from 'date-fns'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
